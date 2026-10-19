@@ -1,5 +1,4 @@
--- Finds the commit where the current branch forked from the default branch,
--- so diffs show only what this branch changed (not newer commits on main).
+-- Small git helpers shared by the git plugins and keymaps.
 local M = {}
 
 local function git(dir, args)
@@ -14,6 +13,8 @@ local function git(dir, args)
   return out[1]
 end
 
+-- Finds the commit where the current branch forked from the default branch,
+-- so diffs show only what this branch changed (not newer commits on main).
 -- dir: directory inside the repo (defaults to cwd)
 -- quiet: suppress warnings (for automatic use)
 function M.merge_base(dir, quiet)
@@ -43,6 +44,23 @@ function M.merge_base(dir, quiet)
     return nil
   end
   return base, default
+end
+
+-- Runs `git <args>` in the background and reports the result.
+function M.run(args)
+  local label = 'git ' .. table.concat(args, ' ')
+  vim.notify(label .. '…')
+  vim.system(vim.list_extend({ 'git' }, args), { text = true }, function(res)
+    vim.schedule(function()
+      local output = vim.trim((res.stdout or '') .. (res.stderr or ''))
+      if res.code == 0 then
+        vim.notify(label .. ' done' .. (output ~= '' and ('\n' .. output) or ''))
+        vim.cmd.checktime() -- reload buffers changed by a pull
+      else
+        vim.notify(label .. ' failed\n' .. output, vim.log.levels.ERROR)
+      end
+    end)
+  end)
 end
 
 return M
