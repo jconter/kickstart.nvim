@@ -91,7 +91,7 @@ vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
-vim.g.have_nerd_font = false
+vim.g.have_nerd_font = true
 
 -- [[ Setting options ]]
 -- See `:help vim.o`
@@ -102,7 +102,7 @@ vim.g.have_nerd_font = false
 vim.o.number = true
 -- You can also add relative line numbers, to help with jumping.
 --  Experiment for yourself to see if you like it!
--- vim.o.relativenumber = true
+vim.o.relativenumber = true
 
 -- Enable mouse mode, can be useful for resizing splits for example!
 vim.o.mouse = 'a'
@@ -207,6 +207,8 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
+-- Map jk to escape
+vim.keymap.set('i', 'jk', '<Esc>')
 
 -- Highlight when yanking (copying) text
 --  Try it with `yap` in normal mode
@@ -661,6 +663,58 @@ require('lazy').setup({
       --  So, we create new capabilities with blink.cmp, and then broadcast that to the servers.
       local capabilities = require('blink.cmp').get_lsp_capabilities()
 
+      -- add this block:
+      local tsdk = (function()
+        -- 1) prefer project TS first
+        local cwd_tsdk = vim.fn.getcwd() .. '/node_modules/typescript/lib'
+        if vim.fn.isdirectory(cwd_tsdk) == 1 then
+          return cwd_tsdk
+        end
+
+        -- 2) try Mason packages (guarded)
+        local ok, mr = pcall(require, 'mason-registry')
+        if ok then
+          local function pkg_tsdk(pkg_name, suffix)
+            if mr.has_package(pkg_name) then
+              local pkg = mr.get_package(pkg_name)
+              local ok2, install_path = pcall(function()
+                return type(pkg.get_install_path) == 'function' and pkg:get_install_path() or nil
+              end)
+              if ok2 and install_path then
+                return install_path .. (suffix or '')
+              end
+            end
+          end
+          -- standalone TS SDK
+          local p = pkg_tsdk('typescript', '/lib')
+          if p then
+            return p
+          end
+          -- SDK bundled with typescript-language-server
+          p = pkg_tsdk('typescript-language-server', '/node_modules/typescript/lib')
+          if p then
+            return p
+          end
+        end
+
+        -- 3) fallback: let Volar resolve globally
+        return nil
+      end)()
+
+      -- Resolve Mason's @vue/language-server path (safe if not installed yet)
+      local vue_ls_path = (function()
+        local ok, mr = pcall(require, 'mason-registry')
+        if not ok or not mr.has_package 'vue-language-server' then
+          return nil
+        end
+        local pkg = mr.get_package 'vue-language-server'
+        local ok2, install_path = pcall(pkg.get_install_path, pkg)
+        if not ok2 then
+          return nil
+        end
+        return install_path .. '/node_modules/@vue/language-server'
+      end)()
+
       -- Enable the following language servers
       --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
       --
@@ -673,7 +727,13 @@ require('lazy').setup({
       local servers = {
         -- clangd = {},
         -- gopls = {},
-        -- pyright = {},
+        pyright = {
+          python = {
+            analysis = {
+              typeCheckingMode = 'strict',
+            },
+          },
+        },
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
         --
@@ -698,7 +758,37 @@ require('lazy').setup({
             },
           },
         },
+        ts_ls = {
+          -- tsserver must attach to .vue for the plugin to work
+          filetypes = {
+            'javascript',
+            'javascriptreact',
+            'javascript.jsx',
+            'typescript',
+            'typescriptreact',
+            'typescript.tsx',
+            'vue',
+          },
+          single_file_support = false,
+          init_options = {
+            hostInfo = 'neovim',
+            plugins = (vue_ls_path and {
+              {
+                name = '@vue/typescript-plugin',
+                location = vue_ls_path,
+                languages = { 'vue' },
+              },
+            } or {}),
+          },
+        },
+
+        vue_ls = {
+          filetypes = { 'vue' },
+        },
       }
+      -- Back/forward compat for names that differ across plugin versions
+      servers.tsserver = servers.tsserver or servers.ts_ls
+      servers.vue_ls = servers.vue_ls or servers.volar
 
       -- Ensure the servers and tools above are installed
       --
@@ -714,6 +804,19 @@ require('lazy').setup({
       -- You can add other tools here that you want Mason to install
       -- for you, so that they are available from within Neovim.
       local ensure_installed = vim.tbl_keys(servers or {})
+      -- translate LSP server names -> Mason package names when they differ
+      local lsp_to_mason = {
+        ts_ls = 'typescript-language-server',
+        tsserver = 'typescript-language-server', -- add this
+        vue_ls = 'vue-language-server', -- add this
+        volar = 'vue-language-server',
+      }
+
+      for i, name in ipairs(ensure_installed) do
+        if lsp_to_mason[name] then
+          ensure_installed[i] = lsp_to_mason[name]
+        end
+      end
       vim.list_extend(ensure_installed, {
         'stylua', -- Used to format Lua code
       })
@@ -769,7 +872,7 @@ require('lazy').setup({
       formatters_by_ft = {
         lua = { 'stylua' },
         -- Conform can also run multiple formatters sequentially
-        -- python = { "isort", "black" },
+        python = { 'isort', 'black' },
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
@@ -799,12 +902,12 @@ require('lazy').setup({
           -- `friendly-snippets` contains a variety of premade snippets.
           --    See the README about individual language/framework/plugin snippets:
           --    https://github.com/rafamadriz/friendly-snippets
-          -- {
-          --   'rafamadriz/friendly-snippets',
-          --   config = function()
-          --     require('luasnip.loaders.from_vscode').lazy_load()
-          --   end,
-          -- },
+          {
+            'rafamadriz/friendly-snippets',
+            config = function()
+              require('luasnip.loaders.from_vscode').lazy_load()
+            end,
+          },
         },
         opts = {},
       },
@@ -881,20 +984,20 @@ require('lazy').setup({
     -- change the command in the config to whatever the name of that colorscheme is.
     --
     -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'folke/tokyonight.nvim',
+    'EdenEast/nightfox.nvim',
     priority = 1000, -- Make sure to load this before all the other start plugins.
     config = function()
       ---@diagnostic disable-next-line: missing-fields
-      require('tokyonight').setup {
-        styles = {
-          comments = { italic = false }, -- Disable italics in comments
-        },
-      }
+      -- require('EdenEast/nightfox.nvim').setup {
+      --   styles = {
+      --     comments = { italic = false }, -- Disable italics in comments
+      --   },
+      -- }
 
       -- Load the colorscheme here.
       -- Like many other themes, this one has different styles, and you could load
       -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      vim.cmd.colorscheme 'nightfox'
     end,
   },
 
@@ -938,28 +1041,71 @@ require('lazy').setup({
       --  Check out: https://github.com/echasnovski/mini.nvim
     end,
   },
-  { -- Highlight, edit, and navigate code
+  {
     'nvim-treesitter/nvim-treesitter',
-    build = ':TSUpdate',
-    main = 'nvim-treesitter.configs', -- Sets main module to use for opts
-    -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
-    opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
-      -- Autoinstall languages that are not installed
-      auto_install = true,
-      highlight = {
-        enable = true,
-        -- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
-        --  If you are experiencing weird indenting issues, add the language to
-        --  the list of additional_vim_regex_highlighting and disabled languages for indent.
-        additional_vim_regex_highlighting = { 'ruby' },
-      },
-      indent = { enable = true, disable = { 'ruby' } },
-    },
+    -- NOTE: the legacy 'master' branch is archived and incompatible with Neovim 0.12+
+    -- (it crashes on markdown injections: "attempt to call method 'range' (a nil value)").
+    -- 'main' is the actively maintained rewrite; see `:help nvim-treesitter-intro`.
+    branch = 'main',
+    config = function()
+      local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+      require('nvim-treesitter').install(parsers)
+
+      ---@param buf integer
+      ---@param language string
+      local function treesitter_try_attach(buf, language)
+        -- Check if a parser exists and load it
+        if not vim.treesitter.language.add(language) then
+          return
+        end
+
+        -- Check if the buffer is valid (might not be after install completes)
+        if not vim.api.nvim_buf_is_valid(buf) then
+          return
+        end
+
+        -- Enable syntax highlighting and other treesitter features
+        vim.treesitter.start(buf, language)
+
+        -- Check if treesitter indentation is available for this language, and if so enable it
+        -- in case there is no indent query, the indentexpr will fallback to vim's built in one
+        local has_indent_query = vim.treesitter.query.get(language, 'indents') ~= nil
+        if has_indent_query then
+          vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+        end
+      end
+
+      local available_parsers = require('nvim-treesitter').get_available()
+      vim.api.nvim_create_autocmd('FileType', {
+        callback = function(args)
+          local buf, filetype = args.buf, args.match
+
+          local language = vim.treesitter.language.get_lang(filetype)
+          if not language then
+            return
+          end
+
+          local installed_parsers = require('nvim-treesitter').get_installed 'parsers'
+
+          if vim.tbl_contains(installed_parsers, language) then
+            -- Enable the parser if it is already installed
+            treesitter_try_attach(buf, language)
+          elseif vim.tbl_contains(available_parsers, language) then
+            -- If a parser is available in `nvim-treesitter`, auto-install it and enable it after the installation is done
+            require('nvim-treesitter').install(language):await(function()
+              treesitter_try_attach(buf, language)
+            end)
+          else
+            -- Try to enable treesitter features in case the parser exists but is not available from `nvim-treesitter`
+            treesitter_try_attach(buf, language)
+          end
+        end,
+      })
+    end,
     -- There are additional nvim-treesitter modules that you can use to interact
     -- with nvim-treesitter. You should go explore a few and see what interests you:
     --
-    --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
+    --    - Incremental selection: see `:help treesitter-incremental-selection` (built into Neovim 0.12+)
     --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
     --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
   },
@@ -973,18 +1119,18 @@ require('lazy').setup({
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug',
-  -- require 'kickstart.plugins.indent_line',
-  -- require 'kickstart.plugins.lint',
-  -- require 'kickstart.plugins.autopairs',
+  require 'kickstart.plugins.debug',
+  require 'kickstart.plugins.indent_line',
+  require 'kickstart.plugins.lint',
+  require 'kickstart.plugins.autopairs',
   -- require 'kickstart.plugins.neo-tree',
-  -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
@@ -1011,6 +1157,9 @@ require('lazy').setup({
     },
   },
 })
+
+require 'custom/core'
+require 'custom/core/keymaps'
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et

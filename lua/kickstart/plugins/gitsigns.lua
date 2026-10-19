@@ -15,6 +15,31 @@ return {
           vim.keymap.set(mode, l, r, opts)
         end
 
+        -- Default the diff base to where this branch forked from main/master.
+        -- Toggle with <leader>hB / <leader>hX (sets vim.g.gitsigns_branch_base).
+        if vim.g.gitsigns_branch_base ~= false then
+          local dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ':p:h')
+          local base = require('custom.core.git_base').merge_base(dir, true)
+          if base then
+            -- Wait for gitsigns' initial update to finish; changing the base
+            -- while it's in flight gets overwritten by its stale result.
+            vim.api.nvim_create_autocmd('User', {
+              pattern = 'GitSignsUpdate',
+              callback = function(ev)
+                if ev.data.buffer ~= bufnr then
+                  return
+                end
+                if vim.api.nvim_buf_is_valid(bufnr) and vim.g.gitsigns_branch_base ~= false then
+                  vim.api.nvim_buf_call(bufnr, function()
+                    gitsigns.change_base(base)
+                  end)
+                end
+                return true -- run once
+              end,
+            })
+          end
+        end
+
         -- Navigation
         map('n', ']c', function()
           if vim.wo.diff then
@@ -55,6 +80,20 @@ return {
         -- Toggles
         map('n', '<leader>tb', gitsigns.toggle_current_line_blame, { desc = '[T]oggle git show [b]lame line' })
         map('n', '<leader>tD', gitsigns.preview_hunk_inline, { desc = '[T]oggle git show [D]eleted' })
+        -- Diff base
+        map('n', '<leader>hB', function()
+          local base, default = require('custom.core.git_base').merge_base()
+          if base then
+            vim.g.gitsigns_branch_base = true
+            gitsigns.change_base(base, true)
+            vim.notify('Gitsigns base: ' .. default .. ' merge-base (' .. base:sub(1, 8) .. ')')
+          end
+        end, { desc = 'git diff signs vs [B]ranch base' })
+        map('n', '<leader>hX', function()
+          vim.g.gitsigns_branch_base = false
+          gitsigns.reset_base(true)
+          vim.notify 'Gitsigns base: index'
+        end, { desc = 'git reset diff base to inde[X]' })
       end,
     },
   },
