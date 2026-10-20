@@ -15,7 +15,6 @@ local servers = {
   gopls = {
     settings = {
       gopls = {
-        gofumpt = true,
         staticcheck = true,
         hints = { parameterNames = true, assignVariableTypes = true, compositeLiteralFields = true },
       },
@@ -55,7 +54,6 @@ local tools = {
   'ruff', -- formatter + import sorting (black/isort need Python >= 3.10 to install)
   -- Go
   'gopls',
-  'gofumpt',
   'goimports',
   'golangci-lint',
   -- Rust

@@ -25,9 +25,9 @@ What that means in practice:
 | Language     | LSP                          | Format              | Lint / extra             | Debug    |
 | ------------ | ---------------------------- | ------------------- | ------------------------ | -------- |
 | Python       | ty (all rules = error)       | ruff (isort + format) |                          | debugpy  |
-| Go           | gopls (gofumpt, staticcheck) | goimports + gofumpt | golangci-lint            | delve    |
+| Go           | gopls (staticcheck)          | repo's golangci-lint fmt, else goimports | golangci-lint (on save), go test | delve |
 | Rust         | rust-analyzer (clippy)       | rustfmt (rustup)    |                          | codelldb |
-| TS / JS / Vue| ts_ls + vue_ls, eslint       | prettierd           |                          |          |
+| TS / JS / Vue| ts_ls + vue_ls, eslint       | prettierd (repo config) | vitest tests         |          |
 | HTML/CSS/JSON/YAML | html, cssls, jsonls, yamlls | prettierd       |                          |          |
 | Lua          | lua_ls + lazydev             | stylua              |                          |          |
 | Shell        | bashls (+ shellcheck)        | shfmt               |                          |          |
