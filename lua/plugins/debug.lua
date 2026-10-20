@@ -1,4 +1,4 @@
--- Debugging (DAP) for Go and Python. Keys: <F5> continue, <F1>/<F2>/<F3> step
+-- Debugging (DAP) for Go, Python and Rust. Keys: <F5> continue, <F1>/<F2>/<F3> step
 -- into/over/out, <F7> toggle UI, plus <leader>d.
 return {
   {
@@ -30,7 +30,7 @@ return {
       require('mason-nvim-dap').setup {
         automatic_installation = true,
         handlers = {},
-        ensure_installed = { 'delve', 'python' },
+        ensure_installed = { 'delve', 'python', 'codelldb' }, -- Go, Python, Rust/C
       }
 
       dapui.setup {

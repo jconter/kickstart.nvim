@@ -27,7 +27,11 @@ return {
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
-        python = { 'isort', 'black' },
+        python = { 'ruff_organize_imports', 'ruff_format' },
+        go = { 'goimports', 'gofumpt' },
+        rust = { 'rustfmt' },
+        sh = { 'shfmt' },
+        bash = { 'shfmt' },
         javascript = prettier,
         javascriptreact = prettier,
         typescript = prettier,
@@ -48,6 +52,7 @@ return {
       local lint = require 'lint'
       lint.linters_by_ft = {
         markdown = { 'markdownlint' },
+        go = { 'golangcilint' },
       }
 
       vim.api.nvim_create_autocmd({ 'BufEnter', 'BufWritePost', 'InsertLeave' }, {

@@ -4,9 +4,26 @@
 -- Per-server settings, passed to vim.lsp.config(). Any other server installed
 -- through :Mason is enabled automatically with its default config.
 local servers = {
-  pyright = {
+  -- Python: ty only (type checking + language features). Every rule is an error,
+  -- including rules that are off by default. Inline configuration overrides a
+  -- project's own [tool.ty] / ty.toml settings.
+  ty = {
     settings = {
-      python = { analysis = { typeCheckingMode = 'strict' } },
+      ty = { configuration = { rules = { all = 'error' } } },
+    },
+  },
+  gopls = {
+    settings = {
+      gopls = {
+        gofumpt = true,
+        staticcheck = true,
+        hints = { parameterNames = true, assignVariableTypes = true, compositeLiteralFields = true },
+      },
+    },
+  },
+  rust_analyzer = {
+    settings = {
+      ['rust-analyzer'] = { check = { command = 'clippy' } },
     },
   },
   lua_ls = {
@@ -30,23 +47,37 @@ local servers = {
   vue_ls = {},
 }
 
--- Everything mason should install (mason package names).
+-- Everything mason should install (mason package names), by language.
+-- Debug adapters are installed in debug.lua; rustfmt/clippy come from rustup.
 local tools = {
-  -- language servers
-  'pyright',
-  'lua-language-server',
+  -- Python
+  'ty',
+  'ruff', -- formatter + import sorting (black/isort need Python >= 3.10 to install)
+  -- Go
+  'gopls',
+  'gofumpt',
+  'goimports',
+  'golangci-lint',
+  -- Rust
+  'rust-analyzer',
+  -- TypeScript / JavaScript / Vue / web
   'typescript-language-server',
   'vue-language-server',
-  -- formatters
-  'stylua',
-  'black',
-  'isort',
+  'eslint-lsp',
+  'html-lsp',
+  'css-lsp',
+  'json-lsp',
+  'yaml-language-server',
   'prettierd',
-  -- linters
+  -- Lua
+  'lua-language-server',
+  'stylua',
+  -- Shell
+  'bash-language-server',
+  'shellcheck',
+  'shfmt',
+  -- Markdown
   'markdownlint',
-  'pylint',
-  'ruff',
-  'mypy',
 }
 
 return {
